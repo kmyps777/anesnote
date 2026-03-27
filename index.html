@@ -11,40 +11,9 @@
   <link rel="manifest" href="manifest.json" />
   <link rel="apple-touch-icon" href="icon-192.png" />
   <link rel="stylesheet" href="style.css" />
-
-  <!-- ======================================================
-       🔥 FIREBASE CONFIG — 이 부분을 본인의 Firebase 프로젝트 설정으로 교체하세요.
-       Firebase Console → 프로젝트 설정 → 앱 추가(웹) → SDK 설정에서 복사
-       ====================================================== -->
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-    import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
-      from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-    import { getFirestore, collection, doc, addDoc, getDocs, updateDoc, deleteDoc,
-             query, orderBy, serverTimestamp }
-      from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-
-    // ✏️ 아래 값들을 본인의 Firebase 프로젝트 값으로 교체하세요
-    const firebaseConfig = {
-      apiKey:            "AIzaSyBahyCwpwASfNvsiQjs70-u3YAOE4kMK6A",
-      authDomain:        "anesnote-5051d.firebaseapp.com",
-      projectId:         "anesnote-5051d",
-      storageBucket:     "anesnote-5051d.firebasestorage.app",
-      messagingSenderId: "469739291392",
-      appId:             "1:469739291392:web:c3cda9992f02c0b2b8e9e5"
-    };
-
-    const app  = initializeApp(firebaseConfig);
-    const auth = getAuth(app);
-    const db   = getFirestore(app);
-
-    // app.js에서 접근할 수 있도록 window에 노출
-    window.__firebase = { auth, db, GoogleAuthProvider, signInWithPopup, signOut,
-                          onAuthStateChanged, collection, doc, addDoc, getDocs,
-                          updateDoc, deleteDoc, query, orderBy, serverTimestamp };
-  </script>
 </head>
 <body>
+
   <!-- 로그인 화면 -->
   <div id="login-screen">
     <div class="login-card">
@@ -84,7 +53,6 @@
     </header>
 
     <main class="main-layout">
-      <!-- 사이드바 메모 목록 -->
       <aside class="sidebar">
         <div class="sidebar-header">
           <h2>메모 목록</h2>
@@ -93,14 +61,13 @@
         <ul id="memo-list"></ul>
       </aside>
 
-      <!-- 메모 상세 / 편집 -->
       <section class="memo-detail">
         <div id="empty-state" class="empty-state">
           <span>📋</span>
           <p>메모를 선택하거나<br/>새 메모를 작성하세요</p>
         </div>
 
-        <!-- BMI 계산기 (고정 빌트인 메모) -->
+        <!-- BMI 계산기 -->
         <div id="bmi-view" class="memo-view" style="display:none">
           <div class="memo-view-header">
             <h2>🧮 BMI 계산기</h2>
@@ -108,14 +75,8 @@
           </div>
           <div class="bmi-card">
             <div class="bmi-inputs">
-              <label>
-                키 (m)
-                <input type="number" id="bmi-height" placeholder="예: 1.70" step="0.01" min="0.5" max="2.5" />
-              </label>
-              <label>
-                몸무게 (kg)
-                <input type="number" id="bmi-weight" placeholder="예: 65" step="0.1" min="1" max="300" />
-              </label>
+              <label>키 (m)<input type="number" id="bmi-height" placeholder="예: 1.70" step="0.01" min="0.5" max="2.5" /></label>
+              <label>몸무게 (kg)<input type="number" id="bmi-weight" placeholder="예: 65" step="0.1" min="1" max="300" /></label>
             </div>
             <button id="bmi-calc-btn" class="btn-primary">계산하기</button>
             <div id="bmi-result" class="bmi-result" style="display:none">
@@ -184,6 +145,284 @@
     </div>
   </div>
 
-  <script src="app.js"></script>
+  <!-- Firebase + 앱 로직을 하나의 module 안에서 실행 (순서 보장) -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
+      from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+    import { getFirestore, collection, doc, addDoc, getDocs, updateDoc, deleteDoc,
+             query, orderBy, serverTimestamp }
+      from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey:            "AIzaSyBahyCwpwASfNvsiQjs70-u3YAOE4kMK6A",
+      authDomain:        "anesnote-5051d.firebaseapp.com",
+      projectId:         "anesnote-5051d",
+      storageBucket:     "anesnote-5051d.firebasestorage.app",
+      messagingSenderId: "469739291392",
+      appId:             "1:469739291392:web:c3cda9992f02c0b2b8e9e5"
+    };
+
+    const app  = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db   = getFirestore(app);
+
+    // ── State ──
+    let currentUser     = null;
+    let memos           = [];
+    let activeMemoId    = null;
+    let editingId       = null;
+    let pendingDeleteId = null;
+
+    // ── DOM ──
+    const loginScreen      = document.getElementById('login-screen');
+    const appEl            = document.getElementById('app');
+    const googleBtn        = document.getElementById('google-login-btn');
+    const logoutBtn        = document.getElementById('logout-btn');
+    const userAvatar       = document.getElementById('user-avatar');
+    const userNameEl       = document.getElementById('user-name');
+    const memoList         = document.getElementById('memo-list');
+    const newMemoBtn       = document.getElementById('new-memo-btn');
+    const emptyState       = document.getElementById('empty-state');
+    const bmiView          = document.getElementById('bmi-view');
+    const userMemoView     = document.getElementById('user-memo-view');
+    const memoForm         = document.getElementById('memo-form');
+    const bmiHeight        = document.getElementById('bmi-height');
+    const bmiWeight        = document.getElementById('bmi-weight');
+    const bmiCalcBtn       = document.getElementById('bmi-calc-btn');
+    const bmiResult        = document.getElementById('bmi-result');
+    const bmiValueEl       = document.getElementById('bmi-value');
+    const bmiLabelEl       = document.getElementById('bmi-label');
+    const bmiBarFill       = document.getElementById('bmi-bar-fill');
+    const bmiBarMarker     = document.getElementById('bmi-bar-marker');
+    const viewTitle        = document.getElementById('view-title');
+    const viewContent      = document.getElementById('view-content');
+    const viewMeta         = document.getElementById('view-meta');
+    const editBtn          = document.getElementById('edit-btn');
+    const deleteBtn        = document.getElementById('delete-btn');
+    const formTitleLabel   = document.getElementById('form-title-label');
+    const memoTitleInput   = document.getElementById('memo-title');
+    const memoContentInput = document.getElementById('memo-content');
+    const cancelBtn        = document.getElementById('cancel-btn');
+    const saveBtn          = document.getElementById('save-btn');
+    const confirmModal     = document.getElementById('confirm-modal');
+    const confirmMemoTitle = document.getElementById('confirm-memo-title');
+    const modalCancel      = document.getElementById('modal-cancel');
+    const modalConfirm     = document.getElementById('modal-confirm');
+
+    // ── Auth ──
+    googleBtn.addEventListener('click', async () => {
+      try {
+        const provider = new GoogleAuthProvider();
+        await signInWithPopup(auth, provider);
+      } catch (err) {
+        console.error('로그인 오류:', err);
+        alert('로그인 실패: ' + err.message);
+      }
+    });
+
+    logoutBtn.addEventListener('click', () => signOut(auth));
+
+    onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        currentUser = user;
+        userAvatar.src = user.photoURL || '';
+        userAvatar.style.display = user.photoURL ? 'block' : 'none';
+        userNameEl.textContent = user.displayName || user.email;
+        loginScreen.style.display = 'none';
+        appEl.style.display = 'block';
+        await loadMemos();
+        renderSidebar();
+        showView('empty');
+      } else {
+        currentUser = null;
+        memos = [];
+        loginScreen.style.display = 'flex';
+        appEl.style.display = 'none';
+      }
+    });
+
+    // ── Firestore ──
+    function userMemosRef() {
+      return collection(db, 'users', currentUser.uid, 'memos');
+    }
+
+    async function loadMemos() {
+      try {
+        const q = query(userMemosRef(), orderBy('createdAt', 'desc'));
+        const snap = await getDocs(q);
+        memos = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      } catch (err) {
+        console.error('메모 불러오기 오류:', err);
+      }
+    }
+
+    async function saveMemo() {
+      const title   = memoTitleInput.value.trim();
+      const content = memoContentInput.value.trim();
+      if (!title) {
+        memoTitleInput.focus();
+        memoTitleInput.style.borderColor = 'var(--danger)';
+        setTimeout(() => { memoTitleInput.style.borderColor = ''; }, 1200);
+        return;
+      }
+      saveBtn.disabled = true;
+      saveBtn.textContent = '저장 중…';
+      try {
+        if (editingId) {
+          await updateDoc(doc(db, 'users', currentUser.uid, 'memos', editingId), {
+            title, content, updatedAt: serverTimestamp()
+          });
+          const idx = memos.findIndex(m => m.id === editingId);
+          if (idx !== -1) memos[idx] = { ...memos[idx], title, content, updatedAt: new Date() };
+          activeMemoId = editingId;
+        } else {
+          const docRef = await addDoc(userMemosRef(), {
+            title, content, createdAt: serverTimestamp(), updatedAt: serverTimestamp()
+          });
+          memos.unshift({ id: docRef.id, title, content, createdAt: new Date(), updatedAt: new Date() });
+          activeMemoId = docRef.id;
+        }
+        renderSidebar();
+        showView('user-view');
+      } catch (err) {
+        console.error('저장 오류:', err);
+        alert('저장 실패: ' + err.message);
+      } finally {
+        saveBtn.disabled = false;
+        saveBtn.textContent = '저장';
+        editingId = null;
+      }
+    }
+
+    async function deleteMemo(id) {
+      try {
+        await deleteDoc(doc(db, 'users', currentUser.uid, 'memos', id));
+        memos = memos.filter(m => m.id !== id);
+        activeMemoId = null;
+        renderSidebar();
+        showView('empty');
+      } catch (err) {
+        console.error('삭제 오류:', err);
+        alert('삭제 실패: ' + err.message);
+      }
+    }
+
+    // ── Sidebar ──
+    function renderSidebar() {
+      memoList.innerHTML = '';
+      const bmiItem = document.createElement('li');
+      bmiItem.className = 'memo-item' + (activeMemoId === 'bmi' ? ' active' : '');
+      bmiItem.innerHTML = `<span class="memo-item-icon">🧮</span><div class="memo-item-info"><div class="memo-item-title">BMI 계산기</div><div class="memo-item-date">기본 메모</div></div>`;
+      bmiItem.addEventListener('click', () => { activeMemoId = 'bmi'; editingId = null; renderSidebar(); showView('bmi'); });
+      memoList.appendChild(bmiItem);
+
+      memos.forEach(memo => {
+        const li = document.createElement('li');
+        li.className = 'memo-item' + (activeMemoId === memo.id ? ' active' : '');
+        li.innerHTML = `<span class="memo-item-icon">📝</span><div class="memo-item-info"><div class="memo-item-title">${esc(memo.title)}</div><div class="memo-item-date">${fmtDate(memo.updatedAt || memo.createdAt)}</div></div>`;
+        li.addEventListener('click', () => { activeMemoId = memo.id; editingId = null; renderSidebar(); showView('user-view'); });
+        memoList.appendChild(li);
+      });
+    }
+
+    // ── Views ──
+    function showView(view) {
+      emptyState.style.display   = 'none';
+      bmiView.style.display      = 'none';
+      userMemoView.style.display = 'none';
+      memoForm.style.display     = 'none';
+
+      if (view === 'empty') {
+        emptyState.style.display = 'flex';
+      } else if (view === 'bmi') {
+        bmiView.style.display = 'block';
+        bmiResult.style.display = 'none';
+        bmiHeight.value = ''; bmiWeight.value = '';
+      } else if (view === 'user-view') {
+        const memo = memos.find(m => m.id === activeMemoId);
+        if (!memo) { showView('empty'); return; }
+        viewTitle.textContent   = memo.title;
+        viewContent.textContent = memo.content || '(내용 없음)';
+        viewMeta.textContent    = `마지막 수정: ${fmtDate(memo.updatedAt || memo.createdAt)}`;
+        userMemoView.style.display = 'block';
+      } else if (view === 'form') {
+        if (editingId) {
+          const memo = memos.find(m => m.id === editingId);
+          formTitleLabel.textContent = '메모 편집';
+          memoTitleInput.value       = memo?.title || '';
+          memoContentInput.value     = memo?.content || '';
+        } else {
+          formTitleLabel.textContent = '새 메모';
+          memoTitleInput.value = ''; memoContentInput.value = '';
+        }
+        memoForm.style.display = 'block';
+        setTimeout(() => memoTitleInput.focus(), 50);
+      }
+    }
+
+    // ── Events ──
+    newMemoBtn.addEventListener('click', () => { activeMemoId = null; editingId = null; renderSidebar(); showView('form'); });
+    editBtn.addEventListener('click', () => { editingId = activeMemoId; showView('form'); });
+    saveBtn.addEventListener('click', saveMemo);
+    cancelBtn.addEventListener('click', () => { editingId = null; (activeMemoId && activeMemoId !== 'bmi') ? showView('user-view') : showView('empty'); });
+    deleteBtn.addEventListener('click', () => {
+      const memo = memos.find(m => m.id === activeMemoId);
+      if (!memo) return;
+      pendingDeleteId = memo.id;
+      confirmMemoTitle.textContent = `"${memo.title}"`;
+      confirmModal.style.display = 'flex';
+    });
+    modalCancel.addEventListener('click', () => { confirmModal.style.display = 'none'; pendingDeleteId = null; });
+    modalConfirm.addEventListener('click', async () => {
+      confirmModal.style.display = 'none';
+      if (pendingDeleteId) { await deleteMemo(pendingDeleteId); pendingDeleteId = null; }
+    });
+    confirmModal.addEventListener('click', e => { if (e.target === confirmModal) { confirmModal.style.display = 'none'; pendingDeleteId = null; } });
+    document.addEventListener('keydown', e => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && memoForm.style.display !== 'none') saveMemo();
+      if (e.key === 'Escape' && confirmModal.style.display !== 'none') { confirmModal.style.display = 'none'; pendingDeleteId = null; }
+    });
+
+    // ── BMI ──
+    bmiCalcBtn.addEventListener('click', calcBMI);
+    bmiHeight.addEventListener('keydown', e => { if (e.key === 'Enter') bmiWeight.focus(); });
+    bmiWeight.addEventListener('keydown', e => { if (e.key === 'Enter') calcBMI(); });
+
+    function calcBMI() {
+      const h = parseFloat(bmiHeight.value);
+      const w = parseFloat(bmiWeight.value);
+      if (!h || !w || h <= 0 || w <= 0) {
+        [bmiHeight, bmiWeight].forEach(el => {
+          if (!parseFloat(el.value)) { el.style.borderColor = 'var(--danger)'; setTimeout(() => { el.style.borderColor = ''; }, 1200); }
+        });
+        return;
+      }
+      const bmi = w / (h * h);
+      bmiValueEl.textContent = (Math.round(bmi * 10) / 10).toFixed(1);
+      let label, cls;
+      if (bmi < 18.5)    { label = '저체중'; cls = 'underweight'; }
+      else if (bmi < 23) { label = '정상';   cls = 'normal'; }
+      else if (bmi < 25) { label = '과체중'; cls = 'overweight'; }
+      else               { label = '비만';   cls = 'obese'; }
+      bmiLabelEl.textContent = label;
+      bmiLabelEl.className   = 'bmi-label ' + cls;
+      const pct = Math.min(100, Math.max(0, ((bmi - 10) / 30) * 100));
+      bmiBarFill.style.width  = pct + '%';
+      bmiBarMarker.style.left = pct + '%';
+      bmiResult.style.display = 'block';
+    }
+
+    // ── Utils ──
+    function fmtDate(ts) {
+      if (!ts) return '';
+      const d = ts.toDate ? ts.toDate() : new Date(ts);
+      if (isNaN(d)) return '';
+      return d.toLocaleDateString('ko-KR', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    }
+    function esc(s) {
+      return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+  </script>
 </body>
 </html>
