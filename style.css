@@ -473,6 +473,113 @@ html, body {
 
 .bmi-bar-labels span { flex: 1; line-height: 1.4; }
 
+/* ── ASA Badge ── */
+.asa-badge {
+  display: inline-block;
+  margin-top: 16px;
+  padding: 6px 20px;
+  border-radius: 20px;
+  border: 1.5px solid;
+  font-size: 20px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  letter-spacing: 1px;
+}
+
+/* ── Pediatric Calculator ── */
+.section-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-mid);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  margin-bottom: 14px;
+}
+
+.pedi-result-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.pedi-result-row:last-child { border-bottom: none; }
+
+.pedi-result-label {
+  font-size: 14px;
+  color: var(--text-mid);
+}
+
+.pedi-result-value {
+  font-size: 16px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  color: var(--accent);
+}
+
+.drug-list {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.drug-header {
+  display: grid;
+  grid-template-columns: 1fr 100px;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--bg3);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-mid);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+
+.drug-row {
+  display: grid;
+  grid-template-columns: 1fr 100px;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 12px;
+  border-top: 1px solid var(--border);
+}
+
+.drug-name {
+  font-size: 13px;
+  color: var(--text);
+}
+
+.drug-dose-input {
+  padding: 5px 8px !important;
+  font-size: 13px !important;
+  font-family: var(--font-mono) !important;
+  text-align: right;
+  background: var(--bg3) !important;
+  border: 1px solid var(--border-mid) !important;
+  border-radius: 6px !important;
+  color: var(--text) !important;
+  outline: none;
+}
+
+.drug-dose-input:focus { border-color: var(--accent) !important; }
+
+select {
+  padding: 12px 14px;
+  background: var(--bg3);
+  border: 1px solid var(--border-mid);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 15px;
+  font-family: var(--font-body);
+  outline: none;
+  width: 100%;
+  transition: border-color 0.2s;
+}
+
+select:focus { border-color: var(--accent); }
+
 /* =============================================
    FORM
    ============================================= */

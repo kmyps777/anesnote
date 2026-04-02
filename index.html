@@ -81,19 +81,74 @@
             <button id="bmi-calc-btn" class="btn-primary">계산하기</button>
             <div id="bmi-result" class="bmi-result" style="display:none">
               <div class="bmi-number" id="bmi-value">--</div>
-              <div class="bmi-label" id="bmi-label">--</div>
               <div class="bmi-bar-wrap">
                 <div class="bmi-bar">
                   <div class="bmi-bar-fill" id="bmi-bar-fill"></div>
                   <div class="bmi-bar-marker" id="bmi-bar-marker"></div>
                 </div>
                 <div class="bmi-bar-labels">
-                  <span>저체중<br/>&lt;18.5</span>
-                  <span>정상<br/>18.5–22.9</span>
-                  <span>과체중<br/>23–24.9</span>
-                  <span>비만<br/>≥25</span>
+                  <span>ASA 1<br/>≤30</span>
+                  <span>ASA 2<br/>30–40</span>
+                  <span>ASA 3<br/>≥40</span>
                 </div>
               </div>
+              <div id="asa-badge" class="asa-badge"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 소아 계산기 -->
+        <div id="pedi-view" class="memo-view" style="display:none">
+          <div class="memo-view-header">
+            <h2>👶 소아 계산기</h2>
+            <span class="badge-builtin">기본 메모</span>
+          </div>
+
+          <!-- 튜브 사이즈 -->
+          <div class="bmi-card" style="margin-bottom:16px">
+            <div class="section-label">튜브 사이즈 / 깊이</div>
+            <div class="bmi-inputs" style="grid-template-columns:1fr 1fr;margin-bottom:12px">
+              <label>나이 (세)<input type="number" id="pedi-age" placeholder="예: 5" min="0" max="17" step="1" /></label>
+              <label>성별
+                <select id="pedi-sex">
+                  <option value="m">남아</option>
+                  <option value="f">여아</option>
+                </select>
+              </label>
+            </div>
+            <button id="pedi-tube-btn" class="btn-primary">계산하기</button>
+            <div id="pedi-tube-result" style="display:none;margin-top:16px">
+              <div class="pedi-result-row">
+                <span class="pedi-result-label">튜브 사이즈</span>
+                <span class="pedi-result-value" id="tube-size">--</span>
+              </div>
+              <div class="pedi-result-row">
+                <span class="pedi-result-label">튜브 깊이</span>
+                <span class="pedi-result-value" id="tube-depth">--</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 약물 용량 -->
+          <div class="bmi-card">
+            <div class="section-label">약물 용량</div>
+            <div class="bmi-inputs" style="grid-template-columns:1fr;margin-bottom:12px">
+              <label>몸무게 (kg)<input type="number" id="pedi-weight" placeholder="예: 20" min="1" max="200" step="0.1" /></label>
+            </div>
+
+            <!-- 약물 목록 (수정 가능) -->
+            <div class="drug-list" id="drug-list">
+              <div class="drug-header">
+                <span>약물명</span>
+                <span>용량 (mg/kg)</span>
+                <span></span>
+              </div>
+              <!-- JS로 렌더 -->
+            </div>
+
+            <button id="pedi-drug-btn" class="btn-primary" style="margin-top:12px">계산하기</button>
+            <div id="pedi-drug-result" style="display:none;margin-top:16px">
+              <!-- JS로 렌더 -->
             </div>
           </div>
         </div>
@@ -145,7 +200,6 @@
     </div>
   </div>
 
-  <!-- Firebase + 앱 로직을 하나의 module 안에서 실행 (순서 보장) -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
@@ -174,6 +228,17 @@
     let editingId       = null;
     let pendingDeleteId = null;
 
+    // 약물 기본값 (수정 가능)
+    let drugs = [
+      { name: 'Robi',     dose: 0.005 },
+      { name: 'Propofol', dose: 2 },
+      { name: 'Rocu',     dose: 0.4 },
+      { name: 'Reverse: Robi', dose: 0.01 },
+      { name: 'Reverse: Pyrinol', dose: 0.25 },
+      { name: 'Dexa',     dose: 0.1 },
+      { name: 'Keto',     dose: 0.5 },
+    ];
+
     // ── DOM ──
     const loginScreen      = document.getElementById('login-screen');
     const appEl            = document.getElementById('app');
@@ -185,6 +250,7 @@
     const newMemoBtn       = document.getElementById('new-memo-btn');
     const emptyState       = document.getElementById('empty-state');
     const bmiView          = document.getElementById('bmi-view');
+    const pediView         = document.getElementById('pedi-view');
     const userMemoView     = document.getElementById('user-memo-view');
     const memoForm         = document.getElementById('memo-form');
     const bmiHeight        = document.getElementById('bmi-height');
@@ -192,9 +258,9 @@
     const bmiCalcBtn       = document.getElementById('bmi-calc-btn');
     const bmiResult        = document.getElementById('bmi-result');
     const bmiValueEl       = document.getElementById('bmi-value');
-    const bmiLabelEl       = document.getElementById('bmi-label');
     const bmiBarFill       = document.getElementById('bmi-bar-fill');
     const bmiBarMarker     = document.getElementById('bmi-bar-marker');
+    const asaBadge         = document.getElementById('asa-badge');
     const viewTitle        = document.getElementById('view-title');
     const viewContent      = document.getElementById('view-content');
     const viewMeta         = document.getElementById('view-meta');
@@ -216,7 +282,6 @@
         const provider = new GoogleAuthProvider();
         await signInWithPopup(auth, provider);
       } catch (err) {
-        console.error('로그인 오류:', err);
         alert('로그인 실패: ' + err.message);
       }
     });
@@ -286,7 +351,6 @@
         renderSidebar();
         showView('user-view');
       } catch (err) {
-        console.error('저장 오류:', err);
         alert('저장 실패: ' + err.message);
       } finally {
         saveBtn.disabled = false;
@@ -303,7 +367,6 @@
         renderSidebar();
         showView('empty');
       } catch (err) {
-        console.error('삭제 오류:', err);
         alert('삭제 실패: ' + err.message);
       }
     }
@@ -311,12 +374,22 @@
     // ── Sidebar ──
     function renderSidebar() {
       memoList.innerHTML = '';
+
+      // BMI
       const bmiItem = document.createElement('li');
       bmiItem.className = 'memo-item' + (activeMemoId === 'bmi' ? ' active' : '');
       bmiItem.innerHTML = `<span class="memo-item-icon">🧮</span><div class="memo-item-info"><div class="memo-item-title">BMI 계산기</div><div class="memo-item-date">기본 메모</div></div>`;
       bmiItem.addEventListener('click', () => { activeMemoId = 'bmi'; editingId = null; renderSidebar(); showView('bmi'); });
       memoList.appendChild(bmiItem);
 
+      // 소아
+      const pediItem = document.createElement('li');
+      pediItem.className = 'memo-item' + (activeMemoId === 'pedi' ? ' active' : '');
+      pediItem.innerHTML = `<span class="memo-item-icon">👶</span><div class="memo-item-info"><div class="memo-item-title">소아 계산기</div><div class="memo-item-date">기본 메모</div></div>`;
+      pediItem.addEventListener('click', () => { activeMemoId = 'pedi'; editingId = null; renderSidebar(); showView('pedi'); });
+      memoList.appendChild(pediItem);
+
+      // 사용자 메모
       memos.forEach(memo => {
         const li = document.createElement('li');
         li.className = 'memo-item' + (activeMemoId === memo.id ? ' active' : '');
@@ -330,6 +403,7 @@
     function showView(view) {
       emptyState.style.display   = 'none';
       bmiView.style.display      = 'none';
+      pediView.style.display     = 'none';
       userMemoView.style.display = 'none';
       memoForm.style.display     = 'none';
 
@@ -339,6 +413,11 @@
         bmiView.style.display = 'block';
         bmiResult.style.display = 'none';
         bmiHeight.value = ''; bmiWeight.value = '';
+      } else if (view === 'pedi') {
+        pediView.style.display = 'block';
+        document.getElementById('pedi-tube-result').style.display = 'none';
+        document.getElementById('pedi-drug-result').style.display = 'none';
+        renderDrugList();
       } else if (view === 'user-view') {
         const memo = memos.find(m => m.id === activeMemoId);
         if (!memo) { showView('empty'); return; }
@@ -365,7 +444,7 @@
     newMemoBtn.addEventListener('click', () => { activeMemoId = null; editingId = null; renderSidebar(); showView('form'); });
     editBtn.addEventListener('click', () => { editingId = activeMemoId; showView('form'); });
     saveBtn.addEventListener('click', saveMemo);
-    cancelBtn.addEventListener('click', () => { editingId = null; (activeMemoId && activeMemoId !== 'bmi') ? showView('user-view') : showView('empty'); });
+    cancelBtn.addEventListener('click', () => { editingId = null; (activeMemoId && activeMemoId !== 'bmi' && activeMemoId !== 'pedi') ? showView('user-view') : showView('empty'); });
     deleteBtn.addEventListener('click', () => {
       const memo = memos.find(m => m.id === activeMemoId);
       if (!memo) return;
@@ -400,17 +479,106 @@
       }
       const bmi = w / (h * h);
       bmiValueEl.textContent = (Math.round(bmi * 10) / 10).toFixed(1);
-      let label, cls;
-      if (bmi < 18.5)    { label = '저체중'; cls = 'underweight'; }
-      else if (bmi < 23) { label = '정상';   cls = 'normal'; }
-      else if (bmi < 25) { label = '과체중'; cls = 'overweight'; }
-      else               { label = '비만';   cls = 'obese'; }
-      bmiLabelEl.textContent = label;
-      bmiLabelEl.className   = 'bmi-label ' + cls;
-      const pct = Math.min(100, Math.max(0, ((bmi - 10) / 30) * 100));
-      bmiBarFill.style.width  = pct + '%';
-      bmiBarMarker.style.left = pct + '%';
+
+      // ASA score (BMI 기준)
+      let asaLevel, asaColor, asaPct;
+      if (bmi <= 30) {
+        asaLevel = 'ASA 1';
+        asaColor = 'var(--accent2)';
+        asaPct = Math.min(100, Math.round((bmi / 30) * 33));
+      } else if (bmi < 40) {
+        asaLevel = 'ASA 2';
+        asaColor = 'var(--warn)';
+        asaPct = Math.round(33 + ((bmi - 30) / 10) * 33);
+      } else {
+        asaLevel = 'ASA 3';
+        asaColor = 'var(--danger)';
+        asaPct = Math.min(100, Math.round(66 + ((bmi - 40) / 10) * 34));
+      }
+
+      bmiBarFill.style.background = asaColor;
+      bmiBarFill.style.width  = asaPct + '%';
+      bmiBarMarker.style.left = asaPct + '%';
+
+      asaBadge.textContent  = asaLevel;
+      asaBadge.style.background = asaColor === 'var(--accent2)' ? 'rgba(0,229,176,0.15)' :
+                                   asaColor === 'var(--warn)'   ? 'rgba(240,180,62,0.15)' :
+                                                                   'rgba(240,99,90,0.15)';
+      asaBadge.style.color  = asaColor;
+      asaBadge.style.borderColor = asaColor;
+
       bmiResult.style.display = 'block';
+    }
+
+    // ── 소아 계산기 ──
+    document.getElementById('pedi-tube-btn').addEventListener('click', calcTube);
+    document.getElementById('pedi-drug-btn').addEventListener('click', calcDrugs);
+
+    function calcTube() {
+      const age = parseFloat(document.getElementById('pedi-age').value);
+      const sex = document.getElementById('pedi-sex').value;
+      if (isNaN(age) || age < 0) {
+        const el = document.getElementById('pedi-age');
+        el.style.borderColor = 'var(--danger)';
+        setTimeout(() => { el.style.borderColor = ''; }, 1200);
+        return;
+      }
+      const offset = sex === 'm' ? 4.0 : 3.5;
+      const tubeSize  = Math.round((age / 4 + offset) * 100) / 100;
+      const tubeDepth = Math.round(tubeSize * 3 * 10) / 10;
+
+      document.getElementById('tube-size').textContent  = tubeSize.toFixed(2) + ' mm';
+      document.getElementById('tube-depth').textContent = tubeDepth.toFixed(1) + ' cm';
+      document.getElementById('pedi-tube-result').style.display = 'block';
+    }
+
+    function renderDrugList() {
+      const container = document.getElementById('drug-list');
+      container.innerHTML = `<div class="drug-header"><span>약물명</span><span style="text-align:right">mg/kg</span></div>`;
+      drugs.forEach((drug, i) => {
+        const row = document.createElement('div');
+        row.className = 'drug-row';
+        row.innerHTML = `
+          <span class="drug-name">${esc(drug.name)}</span>
+          <input type="number" class="drug-dose-input" value="${drug.dose}" step="0.001" min="0" data-idx="${i}" />
+        `;
+        container.appendChild(row);
+      });
+      // 용량 수정 시 즉시 반영
+      container.querySelectorAll('.drug-dose-input').forEach(input => {
+        input.addEventListener('change', e => {
+          const idx = parseInt(e.target.dataset.idx);
+          const val = parseFloat(e.target.value);
+          if (!isNaN(val) && val >= 0) drugs[idx].dose = val;
+        });
+      });
+    }
+
+    function calcDrugs() {
+      const wt = parseFloat(document.getElementById('pedi-weight').value);
+      if (!wt || wt <= 0) {
+        const el = document.getElementById('pedi-weight');
+        el.style.borderColor = 'var(--danger)';
+        setTimeout(() => { el.style.borderColor = ''; }, 1200);
+        return;
+      }
+      // 최신 입력값 반영
+      document.querySelectorAll('.drug-dose-input').forEach(input => {
+        const idx = parseInt(input.dataset.idx);
+        const val = parseFloat(input.value);
+        if (!isNaN(val) && val >= 0) drugs[idx].dose = val;
+      });
+
+      const resultEl = document.getElementById('pedi-drug-result');
+      resultEl.innerHTML = '';
+      drugs.forEach(drug => {
+        const total = Math.round(drug.dose * wt * 1000) / 1000;
+        const row = document.createElement('div');
+        row.className = 'pedi-result-row';
+        row.innerHTML = `<span class="pedi-result-label">${esc(drug.name)}</span><span class="pedi-result-value">${total.toFixed(3)} mg</span>`;
+        resultEl.appendChild(row);
+      });
+      resultEl.style.display = 'block';
     }
 
     // ── Utils ──
